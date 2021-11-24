@@ -3,7 +3,7 @@ import numpy as np
 
 from color_range import Analysis  # This is a class built for analysing the background
 
-img = cv2.imread("bg.png")
+img = cv2.imread("path.png")  # Load in the background image path of the video here
 HEIGHT, WIDTH = img.shape[:2]
 
 colors = set({})  # I'm using sets as they're much faster to loop through
