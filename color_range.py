@@ -96,3 +96,6 @@ class Analysis:
                 return False
         else:
             return False
+
+    def get_rules(self):
+        return self.equations_xy, self.equations_zy
