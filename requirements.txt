@@ -1,0 +1,4 @@
+opencv-python==4.5.3.56
+numba==0.54.1
+numpy==1.20.3
+pyvirtualcam==0.8.0

@@ -1,5 +1,7 @@
 import cv2
 import numpy as np
+import pyvirtualcam
+
 from numba import jit
 
 CUDA_AVAILABLE = False
@@ -24,7 +26,6 @@ colors = np.unique(all_rgb_codes, axis=0)
 print(f"path.png: {colors.shape[0]} unique colours")
 
 analize = Analysis(colors)  # This creates the analysis object. It holds all the details and function for removing the background
-analize.calc_offset()
 analize.range_format()  # This will create a specialised range of equations used to remove the background (more info in color_range.py file)
 equations_xy, equations_zy = analize.get_rules()
 print(f"equations_xy: {equations_xy}")
@@ -34,14 +35,9 @@ if CUDA_AVAILABLE:
     equations_xy = cuda.to_device(equations_xy)
     equations_zy = cuda.to_device(equations_zy)
 
-vidcap = cv2.VideoCapture("video.mp4")  # Load in the video you want edited
-video_name = 'test.mp4'  # This is the new edited video's name
-fps = vidcap.get(cv2.CAP_PROP_FPS)
-success,image = vidcap.read()  # Reads the first frame
+vidcap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Capture live camera feed
+success,image = vidcap.read()
 height, width, layers = image.shape
-print(f"video.mp4: Width={width}, Height={height}")
-
-video = cv2.VideoWriter(video_name, 0, 30, (width,height))  # Set up the video writer 
 
 bg_present = True
 new_bg = cv2.imread("new background.jpg")  # Select a background to show. If background doesn't exist, the frame will not be edited
@@ -56,12 +52,11 @@ def check_colors(analize,image):
     if bg_present:
         for h in range(height):
             for w in range(width):
-                if analize.check_color(image[h, w]):  # This calls one of the functions in the Analize class that chacks whether the color is in in the set range or not. This is one of the slow parts
-                    # Change the color to red
+                if analize.check_color(image[h, w]):  # Calls the analize class to check if the color is in the editing range
                     image[h, w, 0] = new_bg[h, w, 0]
                     image[h, w, 1] = new_bg[h, w, 1]
                     image[h, w, 2] = new_bg[h, w, 2]
-                    
+
 
 if CUDA_AVAILABLE:
     # CUDA kernel (executes on device)
@@ -79,8 +74,8 @@ if CUDA_AVAILABLE:
                ((equations_zy[2,0]*color[2])+equations_zy[2,1] >= color[1]) and
                ((equations_zy[3,0]*color[2])+equations_zy[3,1] <= color[1])):
                 B[i,j,0] = new_bg[i,j,0]
-                B[i,j,1] = new_bg[i,j,1]
-                B[i,j,2] = new_bg[i,j,2]
+                B[i,j,1] = new_bg[i,j,0]
+                B[i,j,2] = new_bg[i,j,0]
             else:
                 B[i,j,0] = A[i,j,0]
                 B[i,j,1] = A[i,j,1]
@@ -99,18 +94,16 @@ if CUDA_AVAILABLE:
             cuda_check_color_kernel[griddim, blockdim, stream](d_A,d_Result,eq_xy,eq_zy) # execute the kernel
             d_Result.copy_to_host(ary=A,stream=stream) # copy from d_Result (on device) back to A (on host)
 
-# Main loop that goes through every frame in the video and edits them
-while success:
-    
-    if CUDA_AVAILABLE:
-        cuda_check_colors(image, equations_xy, equations_zy)
-    else:
-        check_colors(analize, image)
+# Main loop that changes each frame and outputs it.
+with pyvirtualcam.Camera(width=width, height=height, fps=60) as cam:
+    while success:
+        
+        if CUDA_AVAILABLE:
+            cuda_check_colors(image, equations_xy, equations_zy)
+        else:
+            check_colors(analize, image)
 
-    video.write(image)  # Add the new frame to the video
-
-    success,image = vidcap.read()  # Read the next frame
-
-vidcap.release()
-video.release()  # Release the video
-cv2.destroyAllWindows()
+        img = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)  # Convert color mode from BGR to RGB
+        cam.send(img)  # Output the new frame to the virtual camera
+        success,image = vidcap.read()  # Read the next frame
+        cam.sleep_until_next_frame()
