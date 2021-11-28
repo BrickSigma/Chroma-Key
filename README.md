@@ -1,7 +1,11 @@
 # <ins>Chroma-Key</ins>
 This is my own version of chroma key software using python and OpenCV.  
 
-## Different options
+## Libraries and Packages:
+You can install all the packages used via:  
+`pip install -r requirements.txt`
+
+## Different Options:
 1. Video editor
 2. Live stream editor
 
