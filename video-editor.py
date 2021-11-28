@@ -43,23 +43,32 @@ print(f"video.mp4: Width={width}, Height={height}")
 
 video = cv2.VideoWriter(video_name, 0, 30, (width,height))  # Set up the video writer 
 
+bg_present = True
+new_bg = cv2.imread("new background.jpg")  # Select a background to show. If background doesn't exist, the frame will not be edited
+try:
+    y, x = new_bg.shape[:2]
+    new_bg = new_bg[y-height:y, x-width:x]
+except:
+    bg_present = False  # If no background is input, this operator will cancel any edits to the frame.
+
 @jit(nopython=True)
 def check_colors(analize,image):
-    for h in range(height):
-        for w in range(width):
-            if analize.check_color(image[h, w]):  # This calls one of the functions in the Analize class that chacks whether the color is in in the set range or not. This is one of the slow parts
-                # Change the color to red
-                image[h, w, 0] = 0
-                image[h, w, 1] = 0
-                image[h, w, 2] = 255
-
+    if bg_present:
+        for h in range(height):
+            for w in range(width):
+                if analize.check_color(image[h, w]):  # This calls one of the functions in the Analize class that chacks whether the color is in in the set range or not. This is one of the slow parts
+                    # Change the color to red
+                    image[h, w, 0] = new_bg[h, w, 0]
+                    image[h, w, 1] = new_bg[h, w, 1]
+                    image[h, w, 2] = new_bg[h, w, 2]
+                    
 
 if CUDA_AVAILABLE:
     # CUDA kernel (executes on device)
     @cuda.jit()
     def cuda_check_color_kernel(A,B,equations_xy,equations_zy):
         i, j = cuda.grid(2)
-        if i < A.shape[0] and j < A.shape[1]:
+        if i < A.shape[0] and j < A.shape[1] and bg_present:
             color = (A[i,j,0],A[i,j,1],A[i,j,2])
             if (((equations_xy[0,0]*color[0])+equations_xy[0,1] >= color[1]) and
                ((equations_xy[1,0]*color[0])+equations_xy[1,1] <= color[1]) and
@@ -69,9 +78,9 @@ if CUDA_AVAILABLE:
                ((equations_zy[1,0]*color[2])+equations_zy[1,1] <= color[1]) and
                ((equations_zy[2,0]*color[2])+equations_zy[2,1] >= color[1]) and
                ((equations_zy[3,0]*color[2])+equations_zy[3,1] <= color[1])):
-                B[i,j,0] = 0
-                B[i,j,1] = 0
-                B[i,j,2] = 255
+                B[i,j,0] = new_bg[i,j,0]
+                B[i,j,1] = new_bg[i,j,1]
+                B[i,j,2] = new_bg[i,j,2]
             else:
                 B[i,j,0] = A[i,j,0]
                 B[i,j,1] = A[i,j,1]
